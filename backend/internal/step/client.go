@@ -3,6 +3,7 @@ package step
 import (
 	"archive/zip"
 	"bytes"
+	"crypto/x509"
 	"encoding/pem"
 	"fmt"
 	"log"
@@ -14,13 +15,15 @@ import (
 )
 
 type CertBundle struct {
-	CertPEM     []byte
-	KeyPEM      []byte
-	ChainPEM    []byte
+	CertPEM      []byte
+	KeyPEM       []byte
+	ChainPEM     []byte
 	FullChainPEM []byte
-	PFXData     []byte
-	Serial      string
-	NotAfter    time.Time
+	PFXData      []byte
+	Serial       string
+	NotAfter     time.Time
+	CN           string
+	SANs         []string
 }
 
 type StepClient struct {
@@ -186,6 +189,34 @@ func (s *StepClient) IssueCertificate(cn string, sans []string, notAfterDays int
 }
 
 func (s *StepClient) SignCSR(csrPEM string, notAfterDays int) (*CertBundle, error) {
+	block, _ := pem.Decode([]byte(csrPEM))
+	if block == nil || block.Type != "CERTIFICATE REQUEST" {
+		return nil, fmt.Errorf("failed to decode PEM certificate request")
+	}
+
+	csr, err := x509.ParseCertificateRequest(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse certificate request: %w", err)
+	}
+	if err := csr.CheckSignature(); err != nil {
+		return nil, fmt.Errorf("invalid certificate request signature: %w", err)
+	}
+
+	cn := strings.TrimSpace(csr.Subject.CommonName)
+	if cn == "" {
+		return nil, fmt.Errorf("certificate request CommonName is required")
+	}
+
+	sans := make([]string, 0, len(csr.DNSNames)+len(csr.IPAddresses)+len(csr.EmailAddresses)+len(csr.URIs))
+	sans = append(sans, csr.DNSNames...)
+	for _, ip := range csr.IPAddresses {
+		sans = append(sans, ip.String())
+	}
+	sans = append(sans, csr.EmailAddresses...)
+	for _, uri := range csr.URIs {
+		sans = append(sans, uri.String())
+	}
+
 	// Create temporary directory
 	tempDir, err := os.MkdirTemp("", "step-csr-*")
 	if err != nil {
@@ -223,16 +254,18 @@ func (s *StepClient) SignCSR(csrPEM string, notAfterDays int) (*CertBundle, erro
 		return nil, fmt.Errorf("step root command failed: %s, error: %w", string(rootOutput), err)
 	}
 
-	// First, generate a token (we need to extract CN from CSR)
-	// For now, use a generic subject - this could be improved by parsing the CSR
-	// Note: --not-after for token is token validity (default 5m), not certificate validity
+	// Generate an issuance token whose subject matches the CSR CommonName.
+	// Note: --not-after for token is token validity (default 5m), not certificate validity.
 	tokenArgs := []string{
 		"ca", "token",
-		"csr-signing", // Generic subject for CSR signing
+		cn,
 		"--ca-url", s.CAURL,
 		"--root", rootPath,
 		"--provisioner", s.ProvisionerName,
 		"--provisioner-password-file", passwordFile,
+	}
+	for _, san := range sans {
+		tokenArgs = append(tokenArgs, "--san", san)
 	}
 
 	// Execute token command
@@ -242,7 +275,20 @@ func (s *StepClient) SignCSR(csrPEM string, notAfterDays int) (*CertBundle, erro
 		return nil, fmt.Errorf("step token command failed: %w", err)
 	}
 
-	token := strings.TrimSpace(string(tokenOutput))
+	// Extract the JWT from step output. The CLI may emit informational or
+	// formatted text in addition to the token.
+	token := ""
+	for _, line := range strings.Split(string(tokenOutput), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "ey") {
+			token = trimmed
+			break
+		}
+	}
+
+	if token == "" {
+		return nil, fmt.Errorf("failed to extract JWT token from step ca token output")
+	}
 
 	// Now use the token to sign CSR
 	args := []string{
@@ -290,6 +336,8 @@ func (s *StepClient) SignCSR(csrPEM string, notAfterDays int) (*CertBundle, erro
 		FullChainPEM: fullChainPEM,
 		Serial:       serial,
 		NotAfter:     notAfter,
+		CN:           cn,
+		SANs:         sans,
 	}, nil
 }
 

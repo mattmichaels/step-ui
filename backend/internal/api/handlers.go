@@ -139,8 +139,8 @@ func (h *Handlers) IssueCertificate(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"certificate": response,
 		"download": gin.H{
-			"data":     downloadData,
-			"filename": fmt.Sprintf("%s-cert-bundle.zip", req.CN),
+			"data":      downloadData,
+			"filename":  fmt.Sprintf("%s-cert-bundle.zip", req.CN),
 			"mime_type": "application/zip",
 		},
 	})
@@ -164,9 +164,9 @@ func (h *Handlers) SignCSR(c *gin.Context) {
 	// Generate unique ID for the certificate
 	certID := uuid.New().String()
 
-	// Parse CSR to extract CN and SANs (simplified - in real implementation, parse CSR)
-	cn := "unknown" // Would need to parse CSR properly
-	sans := []string{}
+	// Identity metadata is parsed and signature-validated from the CSR by StepClient.
+	cn := bundle.CN
+	sans := bundle.SANs
 
 	// Store certificate metadata in database
 	sansJSON, _ := json.Marshal(sans)
@@ -254,6 +254,7 @@ func (h *Handlers) ListCertificates(c *gin.Context) {
 			NotAfter:    cert.NotAfter,
 			Status:      cert.Status,
 			KeyStrategy: cert.KeyStrategy,
+			KeyType:     cert.KeyType,
 			CreatedAt:   cert.CreatedAt,
 			UpdatedAt:   cert.UpdatedAt,
 		})
@@ -265,7 +266,7 @@ func (h *Handlers) ListCertificates(c *gin.Context) {
 // GetCertificate returns a specific certificate
 func (h *Handlers) GetCertificate(c *gin.Context) {
 	certID := c.Param("id")
-	
+
 	cert, err := h.db.GetCertificate(certID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Certificate not found"})
@@ -282,6 +283,7 @@ func (h *Handlers) GetCertificate(c *gin.Context) {
 		NotAfter:    cert.NotAfter,
 		Status:      cert.Status,
 		KeyStrategy: cert.KeyStrategy,
+		KeyType:     cert.KeyType,
 		CreatedAt:   cert.CreatedAt,
 		UpdatedAt:   cert.UpdatedAt,
 	}
@@ -305,7 +307,7 @@ func (h *Handlers) RenewCertificate(c *gin.Context) {
 	json.Unmarshal([]byte(cert.SANs), &sans)
 
 	// Issue new certificate with same CN and SANs
-	bundle, err := h.stepClient.IssueCertificate(cert.CN, sans, 90) // Default 90 days
+	bundle, err := h.stepClient.IssueCertificate(cert.CN, sans, 90, cert.KeyType) // Default 90 days
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to renew certificate: %v", err)})
 		return
@@ -340,6 +342,7 @@ func (h *Handlers) RenewCertificate(c *gin.Context) {
 		NotAfter:    cert.NotAfter,
 		Status:      cert.Status,
 		KeyStrategy: cert.KeyStrategy,
+		KeyType:     cert.KeyType,
 		CreatedAt:   cert.CreatedAt,
 		UpdatedAt:   cert.UpdatedAt,
 	}
@@ -350,7 +353,7 @@ func (h *Handlers) RenewCertificate(c *gin.Context) {
 // RevokeCertificate revokes a certificate
 func (h *Handlers) RevokeCertificate(c *gin.Context) {
 	certID := c.Param("id")
-	
+
 	// Get certificate
 	cert, err := h.db.GetCertificate(certID)
 	if err != nil {
@@ -394,13 +397,13 @@ func (h *Handlers) GetCASettings(c *gin.Context) {
 	c.JSON(http.StatusOK, settings)
 }
 
-// Health check endpoint  
+// Health check endpoint
 func (h *Handlers) Health(c *gin.Context) {
 	// NEW VERSION WITH ROOT FINGERPRINT SUPPORT
 	fmt.Println("=== HEALTH ENDPOINT HIT ===")
 	response := map[string]interface{}{
-		"status":    "healthy-NEW",
-		"timestamp": time.Now().Format(time.RFC3339),
+		"status":             "healthy-NEW",
+		"timestamp":          time.Now().Format(time.RFC3339),
 		"fingerprint_length": len(h.stepClient.CARootFingerprint),
 	}
 	c.JSON(http.StatusOK, response)
