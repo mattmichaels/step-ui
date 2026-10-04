@@ -31,7 +31,8 @@ type IssueRequest struct {
 	CN           string   `json:"cn" binding:"required"`
 	SANs         []string `json:"sans"`
 	NotAfterDays int      `json:"not_after_days" binding:"required"`
-	Format       string   `json:"format"` // pem, pfx
+	KeyType      string   `json:"key_type"` // rsa-2048, ec-p256
+	Format       string   `json:"format"`   // pem, pfx
 	PFXPassword  string   `json:"pfx_password,omitempty"`
 }
 
@@ -47,6 +48,7 @@ type CertResponse struct {
 	NotAfter    time.Time `json:"not_after"`
 	Status      string    `json:"status"`
 	KeyStrategy string    `json:"key_strategy"`
+	KeyType     string    `json:"key_type"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
@@ -66,9 +68,14 @@ func (h *Handlers) IssueCertificate(c *gin.Context) {
 	}
 
 	log.Printf("DEBUG [Handler]: IssueCertificate handler called with CN=%s\n", req.CN)
-	
+
+	// Default to RSA-2048 for backward compatibility with clients that omit key_type.
+	if req.KeyType == "" {
+		req.KeyType = "rsa-2048"
+	}
+
 	// Generate certificate using step CLI
-	bundle, err := h.stepClient.IssueCertificate(req.CN, req.SANs, req.NotAfterDays)
+	bundle, err := h.stepClient.IssueCertificate(req.CN, req.SANs, req.NotAfterDays, req.KeyType)
 	if err != nil {
 		log.Printf("DEBUG [Handler]: IssueCertificate returned error: %v\n", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to issue certificate: %v", err)})
@@ -87,6 +94,7 @@ func (h *Handlers) IssueCertificate(c *gin.Context) {
 		NotAfter:    bundle.NotAfter,
 		Status:      "active",
 		KeyStrategy: "server",
+		KeyType:     req.KeyType,
 		StorageRef:  "ephemeral",
 		OwnerUser:   "system", // No auth for MVP
 		CreatedAt:   time.Now(),
@@ -123,6 +131,7 @@ func (h *Handlers) IssueCertificate(c *gin.Context) {
 		NotAfter:    bundle.NotAfter,
 		Status:      "active",
 		KeyStrategy: "server",
+		KeyType:     req.KeyType,
 		CreatedAt:   cert.CreatedAt,
 		UpdatedAt:   cert.UpdatedAt,
 	}
@@ -237,7 +246,7 @@ func (h *Handlers) ListCertificates(c *gin.Context) {
 	for _, cert := range certs {
 		var sans []string
 		json.Unmarshal([]byte(cert.SANs), &sans)
-		
+
 		responses = append(responses, CertResponse{
 			ID:          cert.ID,
 			CN:          cert.CN,
@@ -265,7 +274,7 @@ func (h *Handlers) GetCertificate(c *gin.Context) {
 
 	var sans []string
 	json.Unmarshal([]byte(cert.SANs), &sans)
-	
+
 	response := CertResponse{
 		ID:          cert.ID,
 		CN:          cert.CN,
@@ -283,7 +292,7 @@ func (h *Handlers) GetCertificate(c *gin.Context) {
 // RenewCertificate renews a certificate
 func (h *Handlers) RenewCertificate(c *gin.Context) {
 	certID := c.Param("id")
-	
+
 	// Get existing certificate
 	cert, err := h.db.GetCertificate(certID)
 	if err != nil {
@@ -323,7 +332,7 @@ func (h *Handlers) RenewCertificate(c *gin.Context) {
 	// Return new certificate info
 	var responseSans []string
 	json.Unmarshal([]byte(cert.SANs), &responseSans)
-	
+
 	response := CertResponse{
 		ID:          cert.ID,
 		CN:          cert.CN,

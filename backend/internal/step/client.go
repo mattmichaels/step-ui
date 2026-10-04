@@ -39,10 +39,10 @@ func NewStepClient(caURL, caRootFingerprint, provisionerName, provisionerPasswor
 	}
 }
 
-func (s *StepClient) IssueCertificate(cn string, sans []string, notAfterDays int) (*CertBundle, error) {
+func (s *StepClient) IssueCertificate(cn string, sans []string, notAfterDays int, keyType string) (*CertBundle, error) {
 	log.Printf("DEBUG: IssueCertificate called with cn=%s, sans=%v, notAfterDays=%d\n", cn, sans, notAfterDays)
 	log.Printf("DEBUG: StepClient.CARootFingerprint='%s'\n", s.CARootFingerprint)
-	
+
 	// Create temporary directory for certificate files
 	tempDir, err := os.MkdirTemp("", "step-cert-*")
 	if err != nil {
@@ -135,6 +135,17 @@ func (s *StepClient) IssueCertificate(cn string, sans []string, notAfterDays int
 		"--ca-url", s.CAURL,
 		"--root", rootPath,
 		"--not-after", fmt.Sprintf("%dh", notAfterDays*24),
+	}
+
+	// Explicit key algorithm. Default to RSA-2048 for broad appliance compatibility.
+	switch keyType {
+	case "ec-p256":
+		certArgs = append(certArgs, "--kty", "EC", "--curve", "P-256")
+	case "", "rsa-2048":
+		keyType = "rsa-2048"
+		certArgs = append(certArgs, "--kty", "RSA", "--size", "2048")
+	default:
+		return nil, fmt.Errorf("unsupported key type: %s", keyType)
 	}
 
 	// Execute certificate command

@@ -16,6 +16,7 @@ export interface Certificate {
   not_after: string
   status: string
   key_strategy: string
+  key_type: string
   created_at: string
   updated_at: string
 }
@@ -24,6 +25,7 @@ export interface IssueRequest {
   cn: string
   sans: string[]
   not_after_days: number
+  key_type: 'rsa-2048' | 'ec-p256'
   format: 'pem' | 'pfx'
   pfx_password?: string
 }

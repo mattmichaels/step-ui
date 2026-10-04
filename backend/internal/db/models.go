@@ -9,9 +9,10 @@ type Certificate struct {
 	CN          string    `gorm:"index" json:"cn"`
 	SANs        string    `json:"sans"` // JSON array
 	NotAfter    time.Time `gorm:"index" json:"not_after"`
-	Status      string    `json:"status"` // active, revoked, expired
+	Status      string    `json:"status"`       // active, revoked, expired
 	KeyStrategy string    `json:"key_strategy"` // server, csr
-	StorageRef  string    `json:"storage_ref"` // ephemeral, or file path
+	KeyType     string    `json:"key_type"`     // rsa-2048, ec-p256
+	StorageRef  string    `json:"storage_ref"`  // ephemeral, or file path
 	OwnerUser   string    `json:"owner_user"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
@@ -27,10 +28,10 @@ type AuditEvent struct {
 }
 
 type CASettings struct {
-	ID           uint   `gorm:"primaryKey" json:"id"`
-	CAURL        string `json:"ca_url"`
-	RootFingerprint string `json:"root_fingerprint"`
-	ACMEDirectories []string `gorm:"type:text" json:"acme_directories"` // JSON array
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID              uint      `gorm:"primaryKey" json:"id"`
+	CAURL           string    `json:"ca_url"`
+	RootFingerprint string    `json:"root_fingerprint"`
+	ACMEDirectories []string  `gorm:"type:text" json:"acme_directories"` // JSON array
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }

@@ -12,6 +12,7 @@ interface FormData {
   cn: string
   sans: string
   not_after_days: number
+  key_type: 'rsa-2048' | 'ec-p256'
   format: 'pem' | 'pfx'
   pfx_password?: string
 }
@@ -33,7 +34,8 @@ export default function IssueCertificate() {
     defaultValues: {
       cn: '',
       sans: '',
-      not_after_days: 90,
+      not_after_days: 365,
+      key_type: 'rsa-2048',
       format: 'pem',
     },
   })
@@ -53,6 +55,7 @@ export default function IssueCertificate() {
         cn: data.cn,
         sans,
         not_after_days: data.not_after_days,
+        key_type: data.key_type,
         format: data.format,
         pfx_password: data.pfx_password,
       }
@@ -122,6 +125,23 @@ export default function IssueCertificate() {
               />
               <p className="mt-1 text-sm text-gray-500">
                 Comma-separated list of additional domain names
+              </p>
+            </div>
+
+            {/* Key Type */}
+            <div>
+              <label htmlFor="key_type" className="block text-sm font-medium text-gray-700">
+                Key Type
+              </label>
+              <select
+                {...register('key_type')}
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              >
+                <option value="rsa-2048">RSA 2048-bit (recommended for infrastructure)</option>
+                <option value="ec-p256">EC P-256</option>
+              </select>
+              <p className="mt-1 text-sm text-gray-500">
+                RSA 2048 provides broad compatibility with appliances and management interfaces.
               </p>
             </div>
 
