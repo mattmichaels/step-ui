@@ -56,7 +56,7 @@ func (s *StepClient) IssueCertificate(cn string, sans []string, notAfterDays int
 	rootPath := filepath.Join(tempDir, "root.crt")
 
 	// Write password to file
-	if err := os.WriteFile(passwordFile, []byte(s.ProvisionerPassword), 0644); err != nil {
+	if err := os.WriteFile(passwordFile, []byte(s.ProvisionerPassword), 0600); err != nil {
 		return nil, fmt.Errorf("failed to write password file: %w", err)
 	}
 
@@ -98,14 +98,10 @@ func (s *StepClient) IssueCertificate(cn string, sans []string, notAfterDays int
 
 	// Execute token command
 	tokenCmd := exec.Command("step", tokenArgs...)
-	// DEBUG: log the command being executed
-	log.Printf("DEBUG: Executing token command: step %v\n", tokenArgs)
 	tokenOutput, err := tokenCmd.CombinedOutput()
 	if err != nil {
-		log.Printf("DEBUG: Token command FAILED: %s\n", string(tokenOutput))
-		return nil, fmt.Errorf("step token command failed: %s, error: %w", string(tokenOutput), err)
+		return nil, fmt.Errorf("step token command failed: %w", err)
 	}
-	log.Printf("DEBUG: Token command succeeded, output length: %d\n", len(tokenOutput))
 
 	// Extract JWT token from output (it's the line starting with "ey")
 	// The step CLI outputs colored/formatted text before the actual token
@@ -117,13 +113,10 @@ func (s *StepClient) IssueCertificate(cn string, sans []string, notAfterDays int
 			break
 		}
 	}
-	
+
 	if token == "" {
-		log.Printf("DEBUG: Could not extract token from output: %s\n", string(tokenOutput))
 		return nil, fmt.Errorf("failed to extract JWT token from step ca token output")
 	}
-	
-	log.Printf("DEBUG: Extracted token (first 20 chars): %s...\n", token[:min(20, len(token))])
 
 	// Now use the token to issue certificate
 	certArgs := []string{
@@ -211,7 +204,7 @@ func (s *StepClient) SignCSR(csrPEM string, notAfterDays int) (*CertBundle, erro
 	}
 
 	// Write password to file
-	if err := os.WriteFile(passwordFile, []byte(s.ProvisionerPassword), 0644); err != nil {
+	if err := os.WriteFile(passwordFile, []byte(s.ProvisionerPassword), 0600); err != nil {
 		return nil, fmt.Errorf("failed to write password file: %w", err)
 	}
 
@@ -246,7 +239,7 @@ func (s *StepClient) SignCSR(csrPEM string, notAfterDays int) (*CertBundle, erro
 	tokenCmd := exec.Command("step", tokenArgs...)
 	tokenOutput, err := tokenCmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("step token command failed: %s, error: %w", string(tokenOutput), err)
+		return nil, fmt.Errorf("step token command failed: %w", err)
 	}
 
 	token := strings.TrimSpace(string(tokenOutput))
@@ -301,12 +294,50 @@ func (s *StepClient) SignCSR(csrPEM string, notAfterDays int) (*CertBundle, erro
 }
 
 func (s *StepClient) RevokeCertificate(serial string) error {
+	// Generate a purpose-limited one-time revocation token without exposing
+	// the long-lived provisioner password in the process argument list.
+	tempDir, err := os.MkdirTemp("", "step-revoke-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	passwordFile := filepath.Join(tempDir, "password.txt")
+	if err := os.WriteFile(passwordFile, []byte(s.ProvisionerPassword), 0600); err != nil {
+		return fmt.Errorf("failed to write provisioner password file: %w", err)
+	}
+
+	tokenArgs := []string{
+		"ca", "token",
+		"--revoke", serial,
+		"--ca-url", s.CAURL,
+		"--provisioner", s.ProvisionerName,
+		"--provisioner-password-file", passwordFile,
+	}
+
+	tokenCmd := exec.Command("step", tokenArgs...)
+	tokenOutput, err := tokenCmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("step revoke token command failed: %w", err)
+	}
+
+	token := ""
+	for _, line := range strings.Split(string(tokenOutput), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "ey") {
+			token = trimmed
+			break
+		}
+	}
+	if token == "" {
+		return fmt.Errorf("failed to extract JWT token from step ca token output")
+	}
+
 	args := []string{
 		"ca", "revoke",
 		serial,
+		"--token", token,
 		"--ca-url", s.CAURL,
-		"--provisioner", s.ProvisionerName,
-		"--password", s.ProvisionerPassword,
 	}
 
 	cmd := exec.Command("step", args...)
@@ -336,13 +367,13 @@ func (s *StepClient) CreatePFX(certPEM, keyPEM, chainPEM, password string) ([]by
 	if err := os.WriteFile(certPath, []byte(certPEM), 0644); err != nil {
 		return nil, fmt.Errorf("failed to write cert file: %w", err)
 	}
-	if err := os.WriteFile(keyPath, []byte(keyPEM), 0644); err != nil {
+	if err := os.WriteFile(keyPath, []byte(keyPEM), 0600); err != nil {
 		return nil, fmt.Errorf("failed to write key file: %w", err)
 	}
 	if err := os.WriteFile(chainPath, []byte(chainPEM), 0644); err != nil {
 		return nil, fmt.Errorf("failed to write chain file: %w", err)
 	}
-	if err := os.WriteFile(passwordPath, []byte(password), 0644); err != nil {
+	if err := os.WriteFile(passwordPath, []byte(password), 0600); err != nil {
 		return nil, fmt.Errorf("failed to write password file: %w", err)
 	}
 
