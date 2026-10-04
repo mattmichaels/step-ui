@@ -166,14 +166,15 @@ func (s *StepClient) IssueCertificate(cn string, sans []string, notAfterDays int
 		return nil, fmt.Errorf("failed to read key file: %w", err)
 	}
 
-	// Get certificate chain
-	chainPEM, err := s.getChain(certPath)
+	// step returns the leaf followed by its intermediate chain.
+	// Split them so the download bundle has conventional semantics:
+	// cert.pem = leaf, chain.pem = intermediates, fullchain.pem = both.
+	leafPEM, chainPEM, err := splitCertificateChain(certPEM)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get chain: %w", err)
+		return nil, fmt.Errorf("failed to split certificate chain: %w", err)
 	}
 
-	// Create full chain
-	fullChainPEM := append(certPEM, chainPEM...)
+	fullChainPEM := append(append([]byte{}, leafPEM...), chainPEM...)
 
 	// Extract serial number and expiry from certificate
 	serial, notAfter, err := s.parseCertificate(certPEM)
@@ -182,7 +183,7 @@ func (s *StepClient) IssueCertificate(cn string, sans []string, notAfterDays int
 	}
 
 	return &CertBundle{
-		CertPEM:      certPEM,
+		CertPEM:      leafPEM,
 		KeyPEM:       keyPEM,
 		ChainPEM:     chainPEM,
 		FullChainPEM: fullChainPEM,
@@ -274,14 +275,15 @@ func (s *StepClient) SignCSR(csrPEM string, notAfterDays int) (*CertBundle, erro
 		return nil, fmt.Errorf("failed to read cert file: %w", err)
 	}
 
-	// Get certificate chain
-	chainPEM, err := s.getChain(certPath)
+	// step returns the leaf followed by its intermediate chain.
+	// Split them so the download bundle has conventional semantics:
+	// cert.pem = leaf, chain.pem = intermediates, fullchain.pem = both.
+	leafPEM, chainPEM, err := splitCertificateChain(certPEM)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get chain: %w", err)
+		return nil, fmt.Errorf("failed to split certificate chain: %w", err)
 	}
 
-	// Create full chain
-	fullChainPEM := append(certPEM, chainPEM...)
+	fullChainPEM := append(append([]byte{}, leafPEM...), chainPEM...)
 
 	// Extract serial number and expiry from certificate
 	serial, notAfter, err := s.parseCertificate(certPEM)
@@ -290,7 +292,7 @@ func (s *StepClient) SignCSR(csrPEM string, notAfterDays int) (*CertBundle, erro
 	}
 
 	return &CertBundle{
-		CertPEM:      certPEM,
+		CertPEM:      leafPEM,
 		ChainPEM:     chainPEM,
 		FullChainPEM: fullChainPEM,
 		Serial:       serial,
@@ -316,7 +318,7 @@ func (s *StepClient) RevokeCertificate(serial string) error {
 	return nil
 }
 
-func (s *StepClient) CreatePFX(certPEM, keyPEM, password string) ([]byte, error) {
+func (s *StepClient) CreatePFX(certPEM, keyPEM, chainPEM, password string) ([]byte, error) {
 	// Create temporary directory
 	tempDir, err := os.MkdirTemp("", "step-pfx-*")
 	if err != nil {
@@ -326,6 +328,7 @@ func (s *StepClient) CreatePFX(certPEM, keyPEM, password string) ([]byte, error)
 
 	certPath := filepath.Join(tempDir, "cert.crt")
 	keyPath := filepath.Join(tempDir, "cert.key")
+	chainPath := filepath.Join(tempDir, "chain.crt")
 	pfxPath := filepath.Join(tempDir, "cert.p12")
 	passwordPath := filepath.Join(tempDir, "password.txt")
 
@@ -335,6 +338,9 @@ func (s *StepClient) CreatePFX(certPEM, keyPEM, password string) ([]byte, error)
 	}
 	if err := os.WriteFile(keyPath, []byte(keyPEM), 0644); err != nil {
 		return nil, fmt.Errorf("failed to write key file: %w", err)
+	}
+	if err := os.WriteFile(chainPath, []byte(chainPEM), 0644); err != nil {
+		return nil, fmt.Errorf("failed to write chain file: %w", err)
 	}
 	if err := os.WriteFile(passwordPath, []byte(password), 0644); err != nil {
 		return nil, fmt.Errorf("failed to write password file: %w", err)
@@ -346,6 +352,7 @@ func (s *StepClient) CreatePFX(certPEM, keyPEM, password string) ([]byte, error)
 		pfxPath,
 		certPath,
 		keyPath,
+		"--ca", chainPath,
 		"--password-file", passwordPath,
 	}
 
@@ -365,41 +372,40 @@ func (s *StepClient) CreatePFX(certPEM, keyPEM, password string) ([]byte, error)
 	return pfxData, nil
 }
 
-func (s *StepClient) getChain(certPath string) ([]byte, error) {
-	// The step ca certificate command already provides the certificate
-	// We need to get the CA chain (intermediate + root)
-	// Download the root certificate using step ca root
-	
-	tempDir, err := os.MkdirTemp("", "step-chain-*")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create temp dir: %w", err)
-	}
-	defer os.RemoveAll(tempDir)
+func splitCertificateChain(certPEM []byte) ([]byte, []byte, error) {
+	var certificates [][]byte
+	rest := certPEM
 
-	rootPath := filepath.Join(tempDir, "root.crt")
+	for {
+		block, remaining := pem.Decode(rest)
+		if block == nil {
+			break
+		}
+		rest = remaining
 
-	// Download root certificate
-	rootArgs := []string{
-		"ca", "root",
-		rootPath,
-		"--ca-url", s.CAURL,
-	}
-	if s.CARootFingerprint != "" {
-		rootArgs = append(rootArgs, "--fingerprint", s.CARootFingerprint)
-	}
-	rootCmd := exec.Command("step", rootArgs...)
-	rootOutput, err := rootCmd.CombinedOutput()
-	if err != nil {
-		return nil, fmt.Errorf("step root command failed: %s, error: %w", string(rootOutput), err)
+		if block.Type != "CERTIFICATE" {
+			continue
+		}
+
+		certificates = append(certificates, pem.EncodeToMemory(block))
 	}
 
-	// Read the root certificate
-	chainPEM, err := os.ReadFile(rootPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read root certificate: %w", err)
+	if len(certificates) == 0 {
+		return nil, nil, fmt.Errorf("certificate bundle contains no CERTIFICATE blocks")
 	}
 
-	return chainPEM, nil
+	leafPEM := certificates[0]
+
+	var chainPEM []byte
+	for _, cert := range certificates[1:] {
+		chainPEM = append(chainPEM, cert...)
+	}
+
+	if len(chainPEM) == 0 {
+		return nil, nil, fmt.Errorf("certificate bundle contains no intermediate certificates")
+	}
+
+	return leafPEM, chainPEM, nil
 }
 
 func (s *StepClient) parseCertificate(certPEM []byte) (string, time.Time, error) {
@@ -459,7 +465,7 @@ func (s *StepClient) CreateDownloadBundle(bundle *CertBundle, format string, pfx
 
 	// Add PFX if requested
 	if format == "pfx" && len(bundle.KeyPEM) > 0 {
-		pfxData, err := s.CreatePFX(string(bundle.CertPEM), string(bundle.KeyPEM), pfxPassword)
+		pfxData, err := s.CreatePFX(string(bundle.CertPEM), string(bundle.KeyPEM), string(bundle.ChainPEM), pfxPassword)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create PFX: %w", err)
 		}
