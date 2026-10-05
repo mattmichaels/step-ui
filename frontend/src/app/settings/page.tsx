@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from 'react'
 import { certificateApi, CASettings } from '@/lib/api'
-import { Shield, Copy, Download, AlertCircle, CheckCircle } from 'lucide-react'
+import { Copy, AlertCircle } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import Link from 'next/link'
 
 export default function Settings() {
   const [settings, setSettings] = useState<CASettings | null>(null)
   const [loading, setLoading] = useState(true)
+  const [testHost, setTestHost] = useState('')
 
   useEffect(() => {
     loadSettings()
@@ -18,6 +19,11 @@ export default function Settings() {
     try {
       const response = await certificateApi.getCASettings()
       setSettings(response)
+      try {
+        setTestHost(new URL(response.ca_url).hostname)
+      } catch {
+        setTestHost('')
+      }
     } catch (error) {
       console.error('Failed to load CA settings:', error)
       toast.error('Failed to load CA settings')
@@ -29,11 +35,6 @@ export default function Settings() {
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
     toast.success('Copied to clipboard!')
-  }
-
-  const downloadRootCA = () => {
-    // This would typically fetch the root CA certificate
-    toast('Root CA download would be implemented here')
   }
 
   if (loading) {
@@ -249,18 +250,28 @@ security find-certificate -a -c "Your CA Name" /Library/Keychains/System.keychai
             <div className="p-6">
               <div className="bg-gray-50 rounded-md p-4">
                 <h3 className="text-sm font-medium text-gray-900 mb-2">Test Certificate Trust</h3>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Host using a certificate issued by this CA
+                </label>
+                <input
+                  type="text"
+                  value={testHost}
+                  onChange={(event) => setTestHost(event.target.value)}
+                  placeholder="service.example.com"
+                  className="mb-4 block w-full border-gray-300 rounded-md shadow-sm sm:text-sm"
+                />
                 <pre className="text-sm text-gray-800 whitespace-pre-wrap">
-{`# Test with a certificate issued by this CA
-openssl s_client -connect your-domain:443 -showcerts
+{`# Test TLS connection and show the presented certificate chain
+openssl s_client -connect ${testHost || 'service.example.com'}:443 -showcerts
 
 # Verify certificate chain
-openssl verify -CAfile chain.pem fullchain.pem
+openssl verify -CAfile roots.pem -untrusted chain.pem certificate.pem
 
 # Check certificate details
 openssl x509 -in certificate.pem -text -noout`}
                 </pre>
                 <button
-                  onClick={() => copyToClipboard(`openssl s_client -connect your-domain:443 -showcerts\nopenssl verify -CAfile chain.pem fullchain.pem\nopenssl x509 -in certificate.pem -text -noout`)}
+                  onClick={() => copyToClipboard(`openssl s_client -connect ${testHost || 'service.example.com'}:443 -showcerts\nopenssl verify -CAfile roots.pem -untrusted chain.pem certificate.pem\nopenssl x509 -in certificate.pem -text -noout`)}
                   className="mt-2 inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded text-blue-700 bg-blue-100 hover:bg-blue-200"
                 >
                   <Copy className="h-4 w-4 mr-1" />

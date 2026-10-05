@@ -388,7 +388,7 @@ func (h *Handlers) GetCASettings(c *gin.Context) {
 	// This would typically read from configuration
 	settings := gin.H{
 		"ca_url":           h.stepClient.CAURL,
-		"root_fingerprint": "TODO: Calculate from CA root",
+		"root_fingerprint": h.stepClient.CARootFingerprint,
 		"acme_directories": []string{
 			h.stepClient.CAURL + "/acme/acme/directory",
 		},
