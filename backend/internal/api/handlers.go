@@ -91,6 +91,7 @@ func (h *Handlers) IssueCertificate(c *gin.Context) {
 		ID:          certID,
 		CN:          req.CN,
 		SANs:        string(sansJSON),
+		Serial:      bundle.Serial,
 		NotAfter:    bundle.NotAfter,
 		Status:      "active",
 		KeyStrategy: "server",
@@ -174,6 +175,7 @@ func (h *Handlers) SignCSR(c *gin.Context) {
 		ID:          certID,
 		CN:          cn,
 		SANs:        string(sansJSON),
+		Serial:      bundle.Serial,
 		NotAfter:    bundle.NotAfter,
 		Status:      "active",
 		KeyStrategy: "csr",
@@ -313,7 +315,8 @@ func (h *Handlers) RenewCertificate(c *gin.Context) {
 		return
 	}
 
-	// Update certificate in database
+	// Update certificate metadata for the newly issued certificate.
+	cert.Serial = bundle.Serial
 	cert.NotAfter = bundle.NotAfter
 	cert.UpdatedAt = time.Now()
 	if err := h.db.UpdateCertificate(cert); err != nil {
@@ -361,8 +364,20 @@ func (h *Handlers) RevokeCertificate(c *gin.Context) {
 		return
 	}
 
-	// Revoke using step CLI (would need serial number)
-	// For now, just mark as revoked in database
+	// Existing records created before serial persistence cannot be safely
+	// revoked at the CA because their step-ca serial number is unknown.
+	if cert.Serial == "" {
+		c.JSON(http.StatusConflict, gin.H{"error": "Certificate serial number is unavailable; cannot revoke certificate at CA"})
+		return
+	}
+
+	// Revoke at step-ca first. Only update local state after the CA confirms
+	// the revocation so the database cannot falsely report a revoked certificate.
+	if err := h.stepClient.RevokeCertificate(cert.Serial); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to revoke certificate at CA: %v", err)})
+		return
+	}
+
 	cert.Status = "revoked"
 	cert.UpdatedAt = time.Now()
 	if err := h.db.UpdateCertificate(cert); err != nil {
