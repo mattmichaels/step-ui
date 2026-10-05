@@ -225,6 +225,24 @@ security find-certificate -a -c "Your CA Name" /Library/Keychains/System.keychai
                 </div>
               </div>
 
+              {/* iOS/iPadOS Instructions */}
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 mb-3">iOS / iPadOS</h3>
+                <div className="bg-gray-50 rounded-md p-4">
+                  <ol className="text-sm text-gray-800 space-y-2">
+                    <li>1. Download the root CA certificate from <span className="font-mono">{settings?.ca_url}/roots.pem</span></li>
+                    <li>2. Open Settings and install the downloaded certificate profile when prompted</li>
+                    <li>3. Go to Settings → General → About → Certificate Trust Settings</li>
+                    <li>4. Under "Enable Full Trust for Root Certificates", enable trust for the installed root CA</li>
+                    <li>5. Confirm the warning to enable full trust</li>
+                    <li>6. Return to Safari or the application using the CA-issued certificate and verify that it is trusted</li>
+                  </ol>
+                  <p className="mt-3 text-xs text-gray-600">
+                    On managed devices, profile installation or trust settings may be controlled by your administrator or MDM.
+                  </p>
+                </div>
+              </div>
+
               {/* Android Instructions */}
               <div>
                 <h3 className="text-lg font-medium text-gray-900 mb-3">Android</h3>
