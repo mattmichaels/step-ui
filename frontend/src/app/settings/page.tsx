@@ -32,9 +32,36 @@ export default function Settings() {
     }
   }
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-    toast.success('Copied to clipboard!')
+  const copyToClipboard = async (text: string) => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text)
+      } else {
+        throw new Error('Clipboard API unavailable')
+      }
+      toast.success('Copied to clipboard!')
+    } catch {
+      const textarea = document.createElement('textarea')
+      textarea.value = text
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.focus()
+      textarea.select()
+
+      try {
+        const copied = document.execCommand('copy')
+        if (!copied) {
+          throw new Error('Fallback copy failed')
+        }
+        toast.success('Copied to clipboard!')
+      } catch (error) {
+        console.error('Failed to copy to clipboard:', error)
+        toast.error('Failed to copy to clipboard')
+      } finally {
+        document.body.removeChild(textarea)
+      }
+    }
   }
 
   if (loading) {
