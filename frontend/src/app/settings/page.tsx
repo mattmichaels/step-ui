@@ -10,6 +10,9 @@ export default function Settings() {
   const [settings, setSettings] = useState<CASettings | null>(null)
   const [loading, setLoading] = useState(true)
   const [testHost, setTestHost] = useState('')
+  const [defaultDNSSuffix, setDefaultDNSSuffix] = useState('')
+  const [appendDNSSuffix, setAppendDNSSuffix] = useState(false)
+  const [savingIssuanceDefaults, setSavingIssuanceDefaults] = useState(false)
 
   useEffect(() => {
     loadSettings()
@@ -19,6 +22,8 @@ export default function Settings() {
     try {
       const response = await certificateApi.getCASettings()
       setSettings(response)
+      setDefaultDNSSuffix(response.default_dns_suffix || '')
+      setAppendDNSSuffix(response.append_dns_suffix || false)
       try {
         setTestHost(new URL(response.ca_url).hostname)
       } catch {
@@ -29,6 +34,31 @@ export default function Settings() {
       toast.error('Failed to load CA settings')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const saveIssuanceDefaults = async () => {
+    setSavingIssuanceDefaults(true)
+    try {
+      const response = await certificateApi.updateCASettings({
+        default_dns_suffix: defaultDNSSuffix,
+        append_dns_suffix: appendDNSSuffix,
+      })
+
+      setDefaultDNSSuffix(response.default_dns_suffix)
+      setAppendDNSSuffix(response.append_dns_suffix)
+      setSettings(current => current ? {
+        ...current,
+        default_dns_suffix: response.default_dns_suffix,
+        append_dns_suffix: response.append_dns_suffix,
+      } : current)
+
+      toast.success('Certificate issuance defaults saved!')
+    } catch (error: any) {
+      console.error('Failed to save certificate issuance defaults:', error)
+      toast.error(error.response?.data?.error || 'Failed to save certificate issuance defaults')
+    } finally {
+      setSavingIssuanceDefaults(false)
     }
   }
 
@@ -152,6 +182,63 @@ export default function Settings() {
                     </div>
                   ))}
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Certificate Issuance Defaults */}
+          <div className="bg-white rounded-lg shadow">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-medium text-gray-900">Certificate Issuance Defaults</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Optional conveniences for issuing certificates. These settings do not change the CA itself.
+              </p>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label htmlFor="default_dns_suffix" className="block text-sm font-medium text-gray-700">
+                  Default DNS Suffix
+                </label>
+                <input
+                  id="default_dns_suffix"
+                  type="text"
+                  value={defaultDNSSuffix}
+                  onChange={(event) => setDefaultDNSSuffix(event.target.value)}
+                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  placeholder="example.com"
+                />
+                <p className="mt-1 text-sm text-gray-500">
+                  Example: entering <span className="font-mono">server01</span> when the suffix is <span className="font-mono">example.com</span> will issue for <span className="font-mono">server01.example.com</span>.
+                </p>
+              </div>
+
+              <div className="flex items-start">
+                <input
+                  id="append_dns_suffix"
+                  type="checkbox"
+                  checked={appendDNSSuffix}
+                  onChange={(event) => setAppendDNSSuffix(event.target.checked)}
+                  className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <div className="ml-3">
+                  <label htmlFor="append_dns_suffix" className="text-sm font-medium text-gray-700">
+                    Append default DNS suffix when issuing certificates
+                  </label>
+                  <p className="text-sm text-gray-500">
+                    When disabled, the Common Name field remains unchanged and accepts a complete hostname as usual.
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <button
+                  type="button"
+                  onClick={saveIssuanceDefaults}
+                  disabled={savingIssuanceDefaults}
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {savingIssuanceDefaults ? 'Saving...' : 'Save Issuance Defaults'}
+                </button>
               </div>
             </div>
           </div>

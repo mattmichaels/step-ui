@@ -21,5 +21,6 @@ func SetupRoutes(r *gin.Engine, handlers *Handlers) {
 
 		// Settings
 		api.GET("/settings/ca", handlers.GetCASettings)
+		api.PUT("/settings/ca", handlers.UpdateCASettings)
 	}
 }

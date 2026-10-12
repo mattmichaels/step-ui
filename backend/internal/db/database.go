@@ -32,6 +32,22 @@ func NewDatabase(dbPath string) (*Database, error) {
 	return &Database{DB: db}, nil
 }
 
+func (d *Database) GetCASettings() (*CASettings, error) {
+	var settings CASettings
+	err := d.DB.First(&settings).Error
+	if err == gorm.ErrRecordNotFound {
+		return &CASettings{}, nil
+	}
+	return &settings, err
+}
+
+func (d *Database) SaveCASettings(settings *CASettings) error {
+	if settings.ID == 0 {
+		return d.DB.Create(settings).Error
+	}
+	return d.DB.Save(settings).Error
+}
+
 func (d *Database) CreateCertificate(cert *Certificate) error {
 	return d.DB.Create(cert).Error
 }
@@ -45,19 +61,19 @@ func (d *Database) GetCertificate(id string) (*Certificate, error) {
 func (d *Database) ListCertificates(limit, offset int, status string) ([]Certificate, error) {
 	var certs []Certificate
 	query := d.DB.Order("created_at DESC")
-	
+
 	if status != "" {
 		query = query.Where("status = ?", status)
 	}
-	
+
 	if limit > 0 {
 		query = query.Limit(limit)
 	}
-	
+
 	if offset > 0 {
 		query = query.Offset(offset)
 	}
-	
+
 	err := query.Find(&certs).Error
 	return certs, err
 }
@@ -77,15 +93,15 @@ func (d *Database) LogAuditEvent(event *AuditEvent) error {
 func (d *Database) GetAuditEvents(certID string, limit int) ([]AuditEvent, error) {
 	var events []AuditEvent
 	query := d.DB.Order("timestamp DESC")
-	
+
 	if certID != "" {
 		query = query.Where("cert_id = ?", certID)
 	}
-	
+
 	if limit > 0 {
 		query = query.Limit(limit)
 	}
-	
+
 	err := query.Find(&events).Error
 	return events, err
 }

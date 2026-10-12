@@ -45,6 +45,13 @@ export interface CASettings {
   ca_url: string
   root_fingerprint: string
   acme_directories: string[]
+  default_dns_suffix: string
+  append_dns_suffix: boolean
+}
+
+export interface UpdateCASettingsRequest {
+  default_dns_suffix: string
+  append_dns_suffix: boolean
 }
 
 export const certificateApi = {
@@ -91,6 +98,12 @@ export const certificateApi = {
   // Get CA settings
   getCASettings: async () => {
     const response = await api.get('/api/settings/ca')
+    return response.data
+  },
+
+  // Update CA UI preferences
+  updateCASettings: async (data: UpdateCASettingsRequest) => {
+    const response = await api.put('/api/settings/ca', data)
     return response.data
   },
 

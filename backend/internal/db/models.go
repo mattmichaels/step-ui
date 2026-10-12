@@ -29,10 +29,12 @@ type AuditEvent struct {
 }
 
 type CASettings struct {
-	ID              uint      `gorm:"primaryKey" json:"id"`
-	CAURL           string    `json:"ca_url"`
-	RootFingerprint string    `json:"root_fingerprint"`
-	ACMEDirectories []string  `gorm:"type:text" json:"acme_directories"` // JSON array
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ID               uint      `gorm:"primaryKey" json:"id"`
+	CAURL            string    `json:"ca_url"`
+	RootFingerprint  string    `json:"root_fingerprint"`
+	ACMEDirectories  []string  `gorm:"type:text" json:"acme_directories"` // JSON array
+	DefaultDNSSuffix string    `json:"default_dns_suffix"`
+	AppendDNSSuffix  bool      `json:"append_dns_suffix"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }

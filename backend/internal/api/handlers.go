@@ -13,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"strings"
 )
 
 type Handlers struct {
@@ -398,18 +399,63 @@ func (h *Handlers) RevokeCertificate(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Certificate revoked successfully"})
 }
 
-// GetCASettings returns CA configuration
+type UpdateCASettingsRequest struct {
+	DefaultDNSSuffix string `json:"default_dns_suffix"`
+	AppendDNSSuffix  bool   `json:"append_dns_suffix"`
+}
+
+// GetCASettings returns CA configuration and persisted UI preferences
 func (h *Handlers) GetCASettings(c *gin.Context) {
-	// This would typically read from configuration
+	preferences, err := h.db.GetCASettings()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load CA settings"})
+		return
+	}
+
 	settings := gin.H{
 		"ca_url":           h.stepClient.CAURL,
 		"root_fingerprint": h.stepClient.CARootFingerprint,
 		"acme_directories": []string{
 			h.stepClient.CAURL + "/acme/acme/directory",
 		},
+		"default_dns_suffix": preferences.DefaultDNSSuffix,
+		"append_dns_suffix":  preferences.AppendDNSSuffix,
 	}
 
 	c.JSON(http.StatusOK, settings)
+}
+
+// UpdateCASettings persists UI preferences without changing CA configuration
+func (h *Handlers) UpdateCASettings(c *gin.Context) {
+	var request UpdateCASettingsRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid settings request"})
+		return
+	}
+
+	preferences, err := h.db.GetCASettings()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load CA settings"})
+		return
+	}
+
+	preferences.DefaultDNSSuffix = strings.Trim(strings.TrimSpace(request.DefaultDNSSuffix), ".")
+	preferences.AppendDNSSuffix = request.AppendDNSSuffix
+
+	if preferences.AppendDNSSuffix && preferences.DefaultDNSSuffix == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Default DNS suffix is required when automatic suffixing is enabled"})
+		return
+	}
+
+	if err := h.db.SaveCASettings(preferences); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save CA settings"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"default_dns_suffix": preferences.DefaultDNSSuffix,
+		"append_dns_suffix":  preferences.AppendDNSSuffix,
+	})
 }
 
 // Health check endpoint
