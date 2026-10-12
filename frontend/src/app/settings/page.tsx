@@ -24,11 +24,7 @@ export default function Settings() {
       setSettings(response)
       setDefaultDNSSuffix(response.default_dns_suffix || '')
       setAppendDNSSuffix(response.append_dns_suffix || false)
-      try {
-        setTestHost(new URL(response.ca_url).hostname)
-      } catch {
-        setTestHost('')
-      }
+      setTestHost('')
     } catch (error) {
       console.error('Failed to load CA settings:', error)
       toast.error('Failed to load CA settings')
@@ -381,34 +377,60 @@ security find-certificate -a -c "Your CA Name" /Library/Keychains/System.keychai
             </div>
             <div className="p-6">
               <div className="bg-gray-50 rounded-md p-4">
-                <h3 className="text-sm font-medium text-gray-900 mb-2">Test Certificate Trust</h3>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Host using a certificate issued by this CA
+                <h3 className="text-sm font-medium text-gray-900 mb-3">Test Certificate Trust</h3>
+
+                <label htmlFor="tls_test_host" className="block text-sm font-medium text-gray-700">
+                  TLS Host to Test
                 </label>
                 <input
+                  id="tls_test_host"
                   type="text"
                   value={testHost}
                   onChange={(event) => setTestHost(event.target.value)}
                   placeholder="service.example.com"
-                  className="mb-4 block w-full border-gray-300 rounded-md shadow-sm sm:text-sm"
+                  className="mt-1 block w-full bg-white border-2 border-gray-400 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                 />
-                <pre className="text-sm text-gray-800 whitespace-pre-wrap">
-{`# Test TLS connection and show the presented certificate chain
-openssl s_client -connect ${testHost || 'service.example.com'}:443 -showcerts
+                <p className="mt-1 text-sm text-gray-500">
+                  Enter a hostname serving HTTPS on port 443 with a certificate issued by this CA. The command below updates automatically.
+                </p>
 
-# Verify certificate chain
-openssl verify -CAfile roots.pem -untrusted chain.pem certificate.pem
+                <div className="mt-5">
+                  <h4 className="text-sm font-medium text-gray-900">Live TLS Endpoint</h4>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Shows the certificate chain presented by the server. Trust verification also depends on whether your local OpenSSL trusts the issuing root CA.
+                  </p>
+                  <pre className="mt-2 text-sm text-gray-800 whitespace-pre-wrap">
+{`openssl s_client -connect ${testHost || 'service.example.com'}:443 -servername ${testHost || 'service.example.com'} -showcerts`}
+                  </pre>
+                  <button
+                    onClick={() => copyToClipboard(`openssl s_client -connect ${testHost || 'service.example.com'}:443 -servername ${testHost || 'service.example.com'} -showcerts`)}
+                    className="mt-2 inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded text-blue-700 bg-blue-100 hover:bg-blue-200"
+                  >
+                    <Copy className="h-4 w-4 mr-1" />
+                    Copy Command
+                  </button>
+                </div>
 
-# Check certificate details
-openssl x509 -in certificate.pem -text -noout`}
-                </pre>
-                <button
-                  onClick={() => copyToClipboard(`openssl s_client -connect ${testHost || 'service.example.com'}:443 -showcerts\nopenssl verify -CAfile roots.pem -untrusted chain.pem certificate.pem\nopenssl x509 -in certificate.pem -text -noout`)}
-                  className="mt-2 inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded text-blue-700 bg-blue-100 hover:bg-blue-200"
-                >
-                  <Copy className="h-4 w-4 mr-1" />
-                  Copy Commands
-                </button>
+                <div className="mt-6">
+                  <h4 className="text-sm font-medium text-gray-900">Downloaded PEM Bundle</h4>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Run these commands from the directory containing the extracted certificate bundle and roots.pem.
+                  </p>
+                  <pre className="mt-2 text-sm text-gray-800 whitespace-pre-wrap">
+{`# Verify the downloaded leaf certificate and intermediate chain
+openssl verify -CAfile roots.pem -untrusted chain.pem cert.pem
+
+# Inspect the downloaded leaf certificate
+openssl x509 -in cert.pem -text -noout`}
+                  </pre>
+                  <button
+                    onClick={() => copyToClipboard(`openssl verify -CAfile roots.pem -untrusted chain.pem cert.pem\nopenssl x509 -in cert.pem -text -noout`)}
+                    className="mt-2 inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded text-blue-700 bg-blue-100 hover:bg-blue-200"
+                  >
+                    <Copy className="h-4 w-4 mr-1" />
+                    Copy Commands
+                  </button>
+                </div>
               </div>
             </div>
           </div>
