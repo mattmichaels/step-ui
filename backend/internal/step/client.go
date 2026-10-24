@@ -7,6 +7,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"log"
+	"math/big"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -341,9 +342,17 @@ func (s *StepClient) SignCSR(csrPEM string, notAfterDays int) (*CertBundle, erro
 	}, nil
 }
 
+// RevokeCertificate revokes a certificate at the CA.
+// Revision 2026-10-24: Correct CLI argument ordering, convert OpenSSL hex
+// serials to decimal, and explicitly establish CA trust.
 func (s *StepClient) RevokeCertificate(serial string) error {
-	// Generate a purpose-limited one-time revocation token without exposing
-	// the long-lived provisioner password in the process argument list.
+	// OpenSSL reports serials in hexadecimal; step-ca expects decimal.
+	serialInt := new(big.Int)
+	if _, ok := serialInt.SetString(strings.TrimSpace(serial), 16); !ok {
+		return fmt.Errorf("invalid hexadecimal certificate serial")
+	}
+	decimalSerial := serialInt.String()
+
 	tempDir, err := os.MkdirTemp("", "step-revoke-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temp dir: %w", err)
@@ -351,47 +360,56 @@ func (s *StepClient) RevokeCertificate(serial string) error {
 	defer os.RemoveAll(tempDir)
 
 	passwordFile := filepath.Join(tempDir, "password.txt")
+	rootPath := filepath.Join(tempDir, "root.crt")
+	tokenPath := filepath.Join(tempDir, "token.jwt")
+
 	if err := os.WriteFile(passwordFile, []byte(s.ProvisionerPassword), 0600); err != nil {
 		return fmt.Errorf("failed to write provisioner password file: %w", err)
 	}
 
+	rootArgs := []string{"ca", "root", rootPath, "--ca-url", s.CAURL}
+	if s.CARootFingerprint != "" {
+		rootArgs = append(rootArgs, "--fingerprint", s.CARootFingerprint)
+	}
+	rootOutput, err := exec.Command("step", rootArgs...).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to retrieve CA root: %s: %w", strings.TrimSpace(string(rootOutput)), err)
+	}
+
 	tokenArgs := []string{
-		"ca", "token",
-		"--revoke", serial,
+		"ca", "token", decimalSerial,
+		"--revoke",
 		"--ca-url", s.CAURL,
+		"--root", rootPath,
 		"--provisioner", s.ProvisionerName,
 		"--provisioner-password-file", passwordFile,
+		"--output-file", tokenPath,
 	}
 
-	tokenCmd := exec.Command("step", tokenArgs...)
-	tokenOutput, err := tokenCmd.CombinedOutput()
+	tokenOutput, err := exec.Command("step", tokenArgs...).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("step revoke token command failed: %w", err)
+		return fmt.Errorf("revocation token generation failed: %s: %w", strings.TrimSpace(string(tokenOutput)), err)
 	}
 
-	token := ""
-	for _, line := range strings.Split(string(tokenOutput), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "ey") {
-			token = trimmed
-			break
-		}
+	tokenBytes, err := os.ReadFile(tokenPath)
+	if err != nil {
+		return fmt.Errorf("failed to read revocation token: %w", err)
 	}
-	if token == "" {
-		return fmt.Errorf("failed to extract JWT token from step ca token output")
+	token := strings.TrimSpace(string(tokenBytes))
+	if !strings.HasPrefix(token, "ey") {
+		return fmt.Errorf("revocation token output is invalid")
 	}
 
-	args := []string{
-		"ca", "revoke",
-		serial,
+	revokeArgs := []string{
+		"ca", "revoke", decimalSerial,
 		"--token", token,
 		"--ca-url", s.CAURL,
+		"--root", rootPath,
 	}
 
-	cmd := exec.Command("step", args...)
-	output, err := cmd.CombinedOutput()
+	revokeOutput, err := exec.Command("step", revokeArgs...).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("step revoke failed: %s, error: %w", string(output), err)
+		return fmt.Errorf("certificate revocation failed: %s: %w", strings.TrimSpace(string(revokeOutput)), err)
 	}
 
 	return nil
