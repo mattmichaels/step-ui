@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Shield, FileText, List, Settings, Home } from 'lucide-react'
+import { Shield, FileText, List, Settings, Home, Archive } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navigation = [
@@ -10,6 +10,8 @@ const navigation = [
   { name: 'Issue Certificate', href: '/issue', icon: Shield },
   { name: 'Sign CSR', href: '/sign-csr', icon: FileText },
   { name: 'Inventory', href: '/inventory', icon: List },
+  // 2026-10-24: Dedicated certificate archive.
+  { name: 'Archive', href: '/archive', icon: Archive },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 

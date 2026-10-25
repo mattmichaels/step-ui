@@ -51,7 +51,9 @@ type CertResponse struct {
 	KeyStrategy string    `json:"key_strategy"`
 	KeyType     string    `json:"key_type"`
 	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	Serial      string     `json:"serial"`
+	ArchivedAt  *time.Time `json:"archived_at"`
 }
 
 type DownloadResponse struct {
@@ -260,6 +262,8 @@ func (h *Handlers) ListCertificates(c *gin.Context) {
 			KeyType:     cert.KeyType,
 			CreatedAt:   cert.CreatedAt,
 			UpdatedAt:   cert.UpdatedAt,
+			Serial:      cert.Serial,
+			ArchivedAt:  cert.ArchivedAt,
 		})
 	}
 
@@ -302,6 +306,12 @@ func (h *Handlers) RenewCertificate(c *gin.Context) {
 	cert, err := h.db.GetCertificate(certID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Certificate not found"})
+		return
+	}
+
+	// 2026-10-24: Archived certificates are historical records.
+	if cert.ArchivedAt != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "Archived certificates cannot be renewed or revoked; restore the certificate first"})
 		return
 	}
 
@@ -362,6 +372,12 @@ func (h *Handlers) RevokeCertificate(c *gin.Context) {
 	cert, err := h.db.GetCertificate(certID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Certificate not found"})
+		return
+	}
+
+	// 2026-10-24: Archived certificates are historical records.
+	if cert.ArchivedAt != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "Archived certificates cannot be renewed or revoked; restore the certificate first"})
 		return
 	}
 
@@ -468,4 +484,100 @@ func (h *Handlers) Health(c *gin.Context) {
 		"fingerprint_length": len(h.stepClient.CARootFingerprint),
 	}
 	c.JSON(http.StatusOK, response)
+}
+
+
+// 2026-10-24: List certificates manually moved into the archive.
+func (h *Handlers) ListArchivedCertificates(c *gin.Context) {
+    limit, err := strconv.Atoi(c.DefaultQuery("limit", "50"))
+    if err != nil || limit < 1 || limit > 500 {
+        limit = 50
+    }
+
+    offset, err := strconv.Atoi(c.DefaultQuery("offset", "0"))
+    if err != nil || offset < 0 {
+        offset = 0
+    }
+
+    certs, err := h.db.ListArchivedCertificates(limit, offset)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list archived certificates"})
+        return
+    }
+
+    responses := make([]CertResponse, 0, len(certs))
+
+    for _, cert := range certs {
+        var sans []string
+        _ = json.Unmarshal([]byte(cert.SANs), &sans)
+
+        responses = append(responses, CertResponse{
+            ID:          cert.ID,
+            CN:          cert.CN,
+            SANs:        sans,
+            NotAfter:    cert.NotAfter,
+            Status:      cert.Status,
+            KeyStrategy: cert.KeyStrategy,
+            KeyType:     cert.KeyType,
+            CreatedAt:   cert.CreatedAt,
+            UpdatedAt:   cert.UpdatedAt,
+            Serial:      cert.Serial,
+            ArchivedAt:  cert.ArchivedAt,
+        })
+    }
+
+    c.JSON(http.StatusOK, gin.H{"certificates": responses})
+}
+
+// 2026-10-24: Archive an expired or revoked certificate.
+// The database enforces eligibility and records the audit event.
+func (h *Handlers) ArchiveCertificate(c *gin.Context) {
+    id := c.Param("id")
+
+    cert, err := h.db.GetCertificate(id)
+    if err != nil {
+        c.JSON(http.StatusNotFound, gin.H{"error": "Certificate not found"})
+        return
+    }
+
+    if cert.ArchivedAt != nil {
+        c.JSON(http.StatusConflict, gin.H{"error": "Certificate is already archived"})
+        return
+    }
+
+    if cert.Status != "revoked" && !cert.NotAfter.Before(time.Now()) {
+        c.JSON(http.StatusConflict, gin.H{"error": "Only revoked or expired certificates can be archived"})
+        return
+    }
+
+    if err := h.db.ArchiveCertificate(id); err != nil {
+        c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+        return
+    }
+
+    c.JSON(http.StatusOK, gin.H{"message": "Certificate archived", "id": id})
+}
+
+// 2026-10-24: Restore a certificate to the main inventory.
+// This does not change certificate validity or CA revocation state.
+func (h *Handlers) RestoreCertificate(c *gin.Context) {
+    id := c.Param("id")
+
+    cert, err := h.db.GetCertificate(id)
+    if err != nil {
+        c.JSON(http.StatusNotFound, gin.H{"error": "Certificate not found"})
+        return
+    }
+
+    if cert.ArchivedAt == nil {
+        c.JSON(http.StatusConflict, gin.H{"error": "Certificate is not archived"})
+        return
+    }
+
+    if err := h.db.RestoreCertificate(id); err != nil {
+        c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+        return
+    }
+
+    c.JSON(http.StatusOK, gin.H{"message": "Certificate restored", "id": id})
 }
