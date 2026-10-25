@@ -28,7 +28,13 @@ func NewDatabase(dbPath string) (*Database, error) {
 	}
 
 	// Auto-migrate the schema
-	if err := db.AutoMigrate(&Certificate{}, &AuditEvent{}, &CASettings{}); err != nil {
+	if err := db.AutoMigrate(
+		&Certificate{},
+		&AuditEvent{},
+		&CASettings{},
+		&AdminUser{},
+		&AdminSession{},
+	); err != nil {
 		return nil, err
 	}
 

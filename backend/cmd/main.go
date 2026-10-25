@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 
 	"step-ca-webui/internal/api"
 	"step-ca-webui/internal/config"
@@ -14,6 +15,18 @@ import (
 )
 
 func main() {
+	// Administrator CLI commands run independently of the HTTP server
+	// and do not require a connection to Step CA.
+	if len(os.Args) > 1 {
+		if os.Args[1] != "admin" {
+			log.Fatal("Unknown command. Available command: admin")
+		}
+		if err := runAdminCLI(os.Args[2:]); err != nil {
+			log.Fatalf("Administrator command failed: %v", err)
+		}
+		return
+	}
+
 	// Load environment variables
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found, using environment variables")
@@ -21,7 +34,7 @@ func main() {
 
 	// Load configuration
 	cfg := config.Load()
-	
+
 	// DEBUG: Print configuration at startup
 	log.Printf("=== CONFIGURATION ===")
 	log.Printf("CA_URL: %s", cfg.CAURL)
@@ -42,7 +55,7 @@ func main() {
 		cfg.ProvisionerName,
 		cfg.ProvisionerPassword,
 	)
-	
+
 	log.Printf("StepClient initialized with fingerprint: %s", stepClient.CARootFingerprint)
 
 	// Initialize handlers
