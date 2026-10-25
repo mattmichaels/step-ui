@@ -2,7 +2,7 @@ services:
   backend:
     build: ./backend
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     environment:
       - CA_URL=${CA_URL}
       - CA_ROOT_FINGERPRINT=${CA_ROOT_FINGERPRINT:-}
@@ -21,7 +21,7 @@ services:
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
     depends_on:
