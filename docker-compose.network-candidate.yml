@@ -27,6 +27,7 @@ networks:
     ipam:
       config:
         - subnet: 172.30.50.0/29
+          ip_range: 172.30.50.4/30
 
   ca_egress:
     driver: bridge
