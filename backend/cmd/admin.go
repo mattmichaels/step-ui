@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"golang.org/x/term"
 	"gorm.io/gorm"
@@ -84,7 +85,18 @@ func createAdmin(database *gorm.DB) error {
 		return err
 	}
 
-	err = database.Transaction(func(tx *gorm.DB) error {
+	err = insertAdmin(database, username, hash)
+
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Administrator %q created successfully.\n", username)
+	return nil
+}
+
+func insertAdmin(database *gorm.DB, username, hash string) error {
+	return database.Transaction(func(tx *gorm.DB) error {
 		var existing int64
 
 		if err := tx.Model(&db.AdminUser{}).Count(&existing).Error; err != nil {
@@ -95,18 +107,20 @@ func createAdmin(database *gorm.DB) error {
 			return errors.New("administrator already exists")
 		}
 
-		return tx.Create(&db.AdminUser{
+		if err := tx.Create(&db.AdminUser{
 			Username:     username,
 			PasswordHash: hash,
+		}).Error; err != nil {
+			return err
+		}
+
+		return tx.Create(&db.AuditEvent{
+			Who:       username,
+			Action:    "admin.create",
+			Details:   "Administrator account created through local CLI",
+			Timestamp: time.Now(),
 		}).Error
 	})
-
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf("Administrator %q created successfully.\n", username)
-	return nil
 }
 
 func resetAdminPassword(database *gorm.DB) error {
@@ -158,8 +172,22 @@ func updateAdminPassword(database *gorm.DB, adminID uint, hash string) error {
 			return errors.New("administrator no longer exists")
 		}
 
-		return tx.Where("admin_id = ?", adminID).
-			Delete(&db.AdminSession{}).Error
+		if err := tx.Where("admin_id = ?", adminID).
+			Delete(&db.AdminSession{}).Error; err != nil {
+			return err
+		}
+
+		var admin db.AdminUser
+		if err := tx.First(&admin, adminID).Error; err != nil {
+			return err
+		}
+
+		return tx.Create(&db.AuditEvent{
+			Who:       admin.Username,
+			Action:    "admin.password_reset",
+			Details:   "Administrator password reset; existing sessions invalidated",
+			Timestamp: time.Now(),
+		}).Error
 	})
 }
 
