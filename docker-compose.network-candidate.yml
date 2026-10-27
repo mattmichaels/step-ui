@@ -12,6 +12,8 @@ services:
   backend:
     environment:
       STEP_UI_TRUSTED_PROXY: "172.30.50.2"
+    extra_hosts:
+      - "ca.mjm.internal:192.168.0.3"
     networks:
       - proxy_net
       - ca_egress
