@@ -64,22 +64,19 @@ func main() {
 	// Setup Gin router
 	r := gin.Default()
 
-	// Add CORS middleware
-	r.Use(func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(204)
-			return
-		}
-
-		c.Next()
-	})
+	// Do not trust client-supplied forwarding headers.
+	// Proxy trust must be explicitly configured before using
+	// forwarded client addresses for security decisions.
+	if err := r.SetTrustedProxies(nil); err != nil {
+		log.Fatalf("Failed to configure trusted proxies: %v", err)
+	}
 
 	// Setup routes
-	api.SetupRoutes(r, handlers)
+	trustedOrigin := os.Getenv("STEP_UI_ORIGIN")
+	if trustedOrigin == "" {
+		trustedOrigin = "https://step-ui.mjm.internal"
+	}
+	api.SetupRoutes(r, handlers, trustedOrigin)
 
 	// Start server
 	log.Printf("Starting server on port %d", cfg.Port)
