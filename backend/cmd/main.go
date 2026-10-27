@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"net"
 	"os"
 
 	"step-ca-webui/internal/api"
@@ -67,7 +68,20 @@ func main() {
 	// Do not trust client-supplied forwarding headers.
 	// Proxy trust must be explicitly configured before using
 	// forwarded client addresses for security decisions.
-	if err := r.SetTrustedProxies(nil); err != nil {
+	// Proxy headers are untrusted unless a specific proxy IP is configured.
+	// The trusted address must identify Caddy's direct TCP connection.
+	var trustedProxies []string
+
+	if proxy := os.Getenv("STEP_UI_TRUSTED_PROXY"); proxy != "" {
+		ip := net.ParseIP(proxy)
+		if ip == nil {
+			log.Fatalf("Invalid STEP_UI_TRUSTED_PROXY: expected an IP address")
+		}
+
+		trustedProxies = []string{ip.String()}
+	}
+
+	if err := r.SetTrustedProxies(trustedProxies); err != nil {
 		log.Fatalf("Failed to configure trusted proxies: %v", err)
 	}
 
