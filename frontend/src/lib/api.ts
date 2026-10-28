@@ -64,6 +64,15 @@ export interface AuthenticationSettings {
 
 export type UpdateAuthenticationSettingsRequest = AuthenticationSettings
 
+export interface ChangePasswordRequest {
+  current_password: string
+  new_password: string
+}
+
+export interface ChangePasswordResponse {
+  message: string
+}
+
 export const certificateApi = {
   // Issue a new certificate
   issueCertificate: async (data: IssueRequest) => {
@@ -152,6 +161,17 @@ export const certificateApi = {
   ): Promise<AuthenticationSettings> => {
     const response = await api.put<AuthenticationSettings>(
       '/api/settings/authentication',
+      data
+    )
+    return response.data
+  },
+
+  // Change the authenticated administrator's password
+  changePassword: async (
+    data: ChangePasswordRequest
+  ): Promise<ChangePasswordResponse> => {
+    const response = await api.post<ChangePasswordResponse>(
+      '/api/auth/change-password',
       data
     )
     return response.data

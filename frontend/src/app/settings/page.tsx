@@ -6,6 +6,7 @@ import { certificateApi, CASettings } from '@/lib/api'
 import { Copy, AlertCircle } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import Link from 'next/link'
+import ChangePassword from '@/components/settings/ChangePassword'
 
 export default function Settings() {
   const [settings, setSettings] = useState<CASettings | null>(null)
@@ -119,6 +120,7 @@ export default function Settings() {
         <div className="space-y-8">
           {/* Administrator Authentication */}
           <AuthenticationSettings />
+          <ChangePassword />
 
           {/* CA Information */}
           <div className="bg-white rounded-lg shadow">
