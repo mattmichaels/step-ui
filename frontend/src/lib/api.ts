@@ -56,6 +56,14 @@ export interface UpdateCASettingsRequest {
   append_dns_suffix: boolean
 }
 
+export interface AuthenticationSettings {
+  method: 'forms'
+  requirement: 'always'
+  session_duration_hours: number
+}
+
+export type UpdateAuthenticationSettingsRequest = AuthenticationSettings
+
 export const certificateApi = {
   // Issue a new certificate
   issueCertificate: async (data: IssueRequest) => {
@@ -127,6 +135,25 @@ export const certificateApi = {
   // Update CA UI preferences
   updateCASettings: async (data: UpdateCASettingsRequest) => {
     const response = await api.put('/api/settings/ca', data)
+    return response.data
+  },
+
+  // Get administrator authentication settings
+  getAuthenticationSettings: async (): Promise<AuthenticationSettings> => {
+    const response = await api.get<AuthenticationSettings>(
+      '/api/settings/authentication'
+    )
+    return response.data
+  },
+
+  // Update administrator authentication settings
+  updateAuthenticationSettings: async (
+    data: UpdateAuthenticationSettingsRequest
+  ): Promise<AuthenticationSettings> => {
+    const response = await api.put<AuthenticationSettings>(
+      '/api/settings/authentication',
+      data
+    )
     return response.data
   },
 

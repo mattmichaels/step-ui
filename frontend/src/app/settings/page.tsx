@@ -1,5 +1,6 @@
 'use client'
 
+import AuthenticationSettings from '@/components/settings/AuthenticationSettings'
 import { useEffect, useState } from 'react'
 import { certificateApi, CASettings } from '@/lib/api'
 import { Copy, AlertCircle } from 'lucide-react'
@@ -116,6 +117,9 @@ export default function Settings() {
         </div>
 
         <div className="space-y-8">
+          {/* Administrator Authentication */}
+          <AuthenticationSettings />
+
           {/* CA Information */}
           <div className="bg-white rounded-lg shadow">
             <div className="px-6 py-4 border-b border-gray-200">
