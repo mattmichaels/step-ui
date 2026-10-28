@@ -38,6 +38,21 @@ func sessionTokenHash(token string) string {
 // CreateSession generates an opaque token and stores only its SHA-256 hash.
 // The raw token must be delivered to the client through a secure cookie.
 func CreateSession(database *gorm.DB, adminID uint) (string, error) {
+	return CreateSessionWithDuration(database, adminID, SessionDuration)
+}
+
+// CreateSessionWithDuration creates a session with an explicitly validated
+// lifetime. Existing sessions retain their original expiration timestamps.
+func CreateSessionWithDuration(
+	database *gorm.DB,
+	adminID uint,
+	duration time.Duration,
+) (string, error) {
+	if duration < time.Duration(db.MinSessionDurationHours)*time.Hour ||
+		duration > time.Duration(db.MaxSessionDurationHours)*time.Hour {
+		return "", errors.New("invalid session duration")
+	}
+
 	tokenBytes := make([]byte, 32)
 
 	if _, err := rand.Read(tokenBytes); err != nil {
@@ -49,7 +64,7 @@ func CreateSession(database *gorm.DB, adminID uint) (string, error) {
 	session := db.AdminSession{
 		AdminID:   adminID,
 		TokenHash: sessionTokenHash(token),
-		ExpiresAt: time.Now().UTC().Add(SessionDuration),
+		ExpiresAt: time.Now().UTC().Add(duration),
 	}
 
 	if err := database.Create(&session).Error; err != nil {

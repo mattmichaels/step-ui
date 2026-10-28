@@ -22,6 +22,21 @@ var dummyPasswordHash = func() string {
 // Login verifies credentials and creates an audited session.
 // Both session creation and its audit event are committed atomically.
 func Login(database *gorm.DB, username, password string) (string, error) {
+	return LoginWithDuration(database, username, password, SessionDuration)
+}
+
+// LoginWithDuration verifies credentials and creates an audited session
+// using the requested session lifetime.
+func LoginWithDuration(
+	database *gorm.DB,
+	username, password string,
+	duration time.Duration,
+) (string, error) {
+	if duration < time.Duration(db.MinSessionDurationHours)*time.Hour ||
+		duration > time.Duration(db.MaxSessionDurationHours)*time.Hour {
+		return "", errors.New("invalid session duration")
+	}
+
 	var admin db.AdminUser
 
 	err := database.
@@ -48,7 +63,7 @@ func Login(database *gorm.DB, username, password string) (string, error) {
 	err = database.Transaction(func(tx *gorm.DB) error {
 		var err error
 
-		token, err = CreateSession(tx, admin.ID)
+		token, err = CreateSessionWithDuration(tx, admin.ID, duration)
 		if err != nil {
 			return err
 		}

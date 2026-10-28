@@ -39,5 +39,9 @@ func SetupRoutes(r *gin.Engine, handlers *Handlers, trustedOrigin string) {
 		// Settings
 		protected.GET("/settings/ca", handlers.GetCASettings)
 		protected.PUT("/settings/ca", handlers.UpdateCASettings)
+
+		// Authentication settings
+		protected.GET("/settings/authentication", handlers.GetAuthSettings)
+		protected.PUT("/settings/authentication", handlers.UpdateAuthSettings)
 	}
 }

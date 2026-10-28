@@ -34,6 +34,7 @@ func NewDatabase(dbPath string) (*Database, error) {
 		&CASettings{},
 		&AdminUser{},
 		&AdminSession{},
+		&AuthSettings{},
 	); err != nil {
 		return nil, err
 	}

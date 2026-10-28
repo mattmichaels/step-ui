@@ -41,7 +41,22 @@ func (h *Handlers) LoginAdmin(c *gin.Context) {
 		return
 	}
 
-	token, err := auth.Login(h.db.DB, request.Username, request.Password)
+	settings, err := h.db.GetAuthSettings()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Authentication configuration unavailable",
+		})
+		return
+	}
+
+	sessionDuration := time.Duration(settings.SessionDurationHours) * time.Hour
+
+	token, err := auth.LoginWithDuration(
+		h.db.DB,
+		request.Username,
+		request.Password,
+		sessionDuration,
+	)
 	if err != nil {
 		if errors.Is(err, auth.ErrInvalidCredentials) {
 			c.JSON(http.StatusUnauthorized, gin.H{
@@ -60,7 +75,7 @@ func (h *Handlers) LoginAdmin(c *gin.Context) {
 		Name:     sessionCookieName,
 		Value:    token,
 		Path:     "/",
-		MaxAge:   int(auth.SessionDuration.Seconds()),
+		MaxAge:   int(sessionDuration.Seconds()),
 		Secure:   true,
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
