@@ -22,6 +22,7 @@ func SetupRoutes(r *gin.Engine, handlers *Handlers, trustedOrigin string) {
 	{
 		protected.GET("/auth/me", handlers.GetCurrentAdmin)
 		protected.POST("/auth/logout", handlers.LogoutAdmin)
+		protected.POST("/auth/change-password", handlers.ChangeAdminPassword)
 
 		// Certificate operations
 		protected.POST("/certs/issue", handlers.IssueCertificate)

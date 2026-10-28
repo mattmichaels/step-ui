@@ -35,6 +35,16 @@ func sessionTokenHash(token string) string {
 	return hex.EncodeToString(hash[:])
 }
 
+// SessionTokenHash returns the database lookup hash for a valid
+// session token. It never returns or stores the raw token.
+func SessionTokenHash(token string) (string, error) {
+	if !validSessionToken(token) {
+		return "", ErrInvalidSession
+	}
+
+	return sessionTokenHash(token), nil
+}
+
 // CreateSession generates an opaque token and stores only its SHA-256 hash.
 // The raw token must be delivered to the client through a secure cookie.
 func CreateSession(database *gorm.DB, adminID uint) (string, error) {
