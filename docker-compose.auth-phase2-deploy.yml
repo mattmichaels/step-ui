@@ -1,0 +1,8 @@
+services:
+  backend:
+    image: step-ui-backend:auth-phase2
+    build: !reset null
+
+  frontend:
+    image: step-ui-frontend:auth-phase2
+    build: !reset null
