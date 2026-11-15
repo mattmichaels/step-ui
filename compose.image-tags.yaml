@@ -1,0 +1,11 @@
+# 2026-11-15: REV01 - Assign stable image tags for production builds.
+# Prevent Docker Compose from attempting to build images named sha256:<digest>.
+# Existing Compose files and container configurations remain unchanged.
+# Rollback: Remove this override from the deployment wrapper.
+
+services:
+  backend:
+    image: step-ui-backend:latest
+
+  frontend:
+    image: step-ui-frontend:latest
