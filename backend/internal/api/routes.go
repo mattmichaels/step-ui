@@ -1,3 +1,5 @@
+// 2026-11-14: REV01 - Add authenticated historical public certificate and chain download routes.
+// Preserve existing production authentication, CSRF, certificate and settings routes.
 package api
 
 import (
@@ -31,6 +33,8 @@ func SetupRoutes(r *gin.Engine, handlers *Handlers, trustedOrigin string) {
 		// 2026-10-24: Manual certificate archive and restore.
 		protected.GET("/certs/archived", handlers.ListArchivedCertificates)
 		protected.GET("/certs/:id", handlers.GetCertificate)
+		protected.GET("/certs/:id/download", handlers.DownloadRetainedCertificate)
+		protected.GET("/certs/:id/chain", handlers.DownloadRetainedCertificateChain)
 		protected.POST("/certs/:id/renew", handlers.RenewCertificate)
 		protected.POST("/certs/:id/revoke", handlers.RevokeCertificate)
 		protected.POST("/certs/:id/archive", handlers.ArchiveCertificate)

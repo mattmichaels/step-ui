@@ -1,5 +1,8 @@
 'use client'
 
+// 2026-11-14: Add optional public PEM retention and authenticated historical downloads.
+// 2026-11-14: REV03 - Default public certificate retention from saved CA settings; preserve user overrides.
+
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { certificateApi, IssueRequest } from '@/lib/api'
@@ -15,6 +18,7 @@ interface FormData {
   key_type: 'rsa-2048' | 'ec-p256'
   format: 'pem' | 'pfx'
   pfx_password?: string
+  retain_certificate: boolean
 }
 
 export default function IssueCertificate() {
@@ -30,6 +34,8 @@ export default function IssueCertificate() {
   const {
     register,
     handleSubmit,
+    setValue,
+    getFieldState,
     watch,
     formState: { errors },
   } = useForm<FormData>({
@@ -39,6 +45,7 @@ export default function IssueCertificate() {
       not_after_days: 365,
       key_type: 'rsa-2048',
       format: 'pem',
+      retain_certificate: false,
     },
   })
 
@@ -50,13 +57,16 @@ export default function IssueCertificate() {
         const settings = await certificateApi.getCASettings()
         setDefaultDNSSuffix(settings.default_dns_suffix || '')
         setAppendDNSSuffix(settings.append_dns_suffix || false)
+        if (!getFieldState('retain_certificate').isDirty) {
+          setValue('retain_certificate', settings.retain_certificates === true)
+        }
       } catch (error) {
         console.error('Failed to load certificate issuance defaults:', error)
       }
     }
 
     loadIssuanceDefaults()
-  }, [])
+  }, [getFieldState, setValue])
 
   const onSubmit = async (data: FormData) => {
     setLoading(true)
@@ -78,6 +88,7 @@ export default function IssueCertificate() {
         key_type: data.key_type,
         format: data.format,
         pfx_password: data.pfx_password,
+        retain_certificate: data.retain_certificate,
       }
 
       const response = await certificateApi.issueCertificate(request)
@@ -243,6 +254,10 @@ export default function IssueCertificate() {
             )}
 
             {/* Submit Button */}
+              <label className="flex items-start gap-2 text-sm text-gray-700 mb-4">
+                <input type="checkbox" {...register('retain_certificate')} className="mt-1" />
+                <span>Retain public certificate and intermediate-chain PEM for later download. Private keys and PFX bundles are never retained.</span>
+              </label>
             <div className="flex justify-end space-x-3">
               <Link
                 href="/"
@@ -250,6 +265,7 @@ export default function IssueCertificate() {
               >
                 Cancel
               </Link>
+
               <button
                 type="submit"
                 disabled={loading}

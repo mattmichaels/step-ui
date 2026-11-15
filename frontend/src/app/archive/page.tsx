@@ -1,5 +1,7 @@
 'use client'
 
+// 2026-11-14: Add optional public PEM retention and authenticated historical downloads.
+
 // 2026-10-24: Certificate archive.
 // Archived certificates remain in the database and retain their CA status.
 
@@ -198,6 +200,16 @@ export default function CertificateArchive() {
                       </td>
 
                       <td className="px-6 py-4">
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {cert.has_retained_certificate && (
+                            <button type="button" onClick={() => certificateApi.downloadRetainedCertificate(cert.id).catch(() => toast.error('Certificate download failed'))}
+                              className="text-sm text-blue-600 hover:text-blue-800">Download certificate</button>
+                          )}
+                          {cert.has_retained_chain && (
+                            <button type="button" onClick={() => certificateApi.downloadRetainedChain(cert.id).catch(() => toast.error('Chain download failed'))}
+                              className="text-sm text-blue-600 hover:text-blue-800">Download chain</button>
+                          )}
+                        </div>
                         <button
                           type="button"
                           onClick={() => handleRestore(cert)}

@@ -1,3 +1,5 @@
+// 2026-11-14: REV01 - Migrate public certificate artifacts and atomically delete artifacts with inventory entries.
+// Preserve production schema, settings, and existing database operations.
 package db
 
 import (
@@ -34,6 +36,7 @@ func NewDatabase(dbPath string) (*Database, error) {
 		&CASettings{},
 		&AdminUser{},
 		&AdminSession{},
+		&CertificateArtifact{},
 	); err != nil {
 		return nil, err
 	}
@@ -93,7 +96,12 @@ func (d *Database) UpdateCertificate(cert *Certificate) error {
 }
 
 func (d *Database) DeleteCertificate(id string) error {
-	return d.DB.Where("id = ?", id).Delete(&Certificate{}).Error
+	return d.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("certificate_id = ?", id).Delete(&CertificateArtifact{}).Error; err != nil {
+			return err
+		}
+		return tx.Where("id = ?", id).Delete(&Certificate{}).Error
+	})
 }
 
 func (d *Database) LogAuditEvent(event *AuditEvent) error {

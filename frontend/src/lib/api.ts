@@ -1,3 +1,5 @@
+// 2026-11-14: REV02 - Preserve production retention settings while adding authenticated historical PEM downloads.
+// 2026-11-14: Add retained PEM availability and authenticated download API methods.
 import axios from 'axios'
 
 const API_URL = '' // Same-origin API requests through Caddy
@@ -21,6 +23,8 @@ export interface Certificate {
   updated_at: string
   serial: string
   archived_at: string | null
+  has_retained_certificate: boolean
+  has_retained_chain: boolean
 }
 
 export interface IssueRequest {
@@ -30,11 +34,13 @@ export interface IssueRequest {
   key_type: 'rsa-2048' | 'ec-p256'
   format: 'pem' | 'pfx'
   pfx_password?: string
+  retain_certificate?: boolean
 }
 
 export interface SignCSRRequest {
   csr_pem: string
   not_after_days: number
+  retain_certificate?: boolean
 }
 
 export interface CertBundle {
@@ -49,14 +55,55 @@ export interface CASettings {
   acme_directories: string[]
   default_dns_suffix: string
   append_dns_suffix: boolean
+  retain_certificates: boolean
+  retain_private_keys: boolean
 }
 
 export interface UpdateCASettingsRequest {
   default_dns_suffix: string
   append_dns_suffix: boolean
+  retain_certificates: boolean
+  retain_private_keys: boolean
+}
+
+export interface AuthenticationSettings {
+  method: 'forms'
+  requirement: 'always'
+  session_duration_hours: number
+}
+
+export type UpdateAuthenticationSettingsRequest = AuthenticationSettings
+
+export interface ChangePasswordRequest {
+  current_password: string
+  new_password: string
+}
+
+export interface ChangePasswordResponse {
+  message: string
+}
+
+// Download only authenticated public PEM artifacts; no private keys are retained.
+const downloadRetainedPEM = async (id: string, kind: 'download' | 'chain', filename: string) => {
+  const response = await api.get<Blob>(`/api/certs/${encodeURIComponent(id)}/${kind}`, {
+    responseType: 'blob',
+  })
+  const url = window.URL.createObjectURL(response.data)
+  try {
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    try { link.click() } finally { document.body.removeChild(link) }
+  } finally {
+    window.URL.revokeObjectURL(url)
+  }
 }
 
 export const certificateApi = {
+  downloadRetainedCertificate: (id: string) => downloadRetainedPEM(id, 'download', 'certificate.crt'),
+  downloadRetainedChain: (id: string) => downloadRetainedPEM(id, 'chain', 'certificate-chain.pem'),
+
   // Issue a new certificate
   issueCertificate: async (data: IssueRequest) => {
     const response = await api.post('/api/certs/issue', data)
@@ -127,6 +174,36 @@ export const certificateApi = {
   // Update CA UI preferences
   updateCASettings: async (data: UpdateCASettingsRequest) => {
     const response = await api.put('/api/settings/ca', data)
+    return response.data
+  },
+
+  // Get administrator authentication settings
+  getAuthenticationSettings: async (): Promise<AuthenticationSettings> => {
+    const response = await api.get<AuthenticationSettings>(
+      '/api/settings/authentication'
+    )
+    return response.data
+  },
+
+  // Update administrator authentication settings
+  updateAuthenticationSettings: async (
+    data: UpdateAuthenticationSettingsRequest
+  ): Promise<AuthenticationSettings> => {
+    const response = await api.put<AuthenticationSettings>(
+      '/api/settings/authentication',
+      data
+    )
+    return response.data
+  },
+
+  // Change the authenticated administrator's password
+  changePassword: async (
+    data: ChangePasswordRequest
+  ): Promise<ChangePasswordResponse> => {
+    const response = await api.post<ChangePasswordResponse>(
+      '/api/auth/change-password',
+      data
+    )
     return response.data
   },
 

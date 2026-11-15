@@ -1,5 +1,7 @@
 'use client'
 
+// 2026-11-14: Add optional public PEM retention and authenticated historical downloads.
+
 import { useEffect, useState } from 'react'
 import { certificateApi, Certificate } from '@/lib/api'
 import { formatDate, getDaysUntilExpiry, getExpiryStatus } from '@/lib/utils'
@@ -350,6 +352,22 @@ export default function Inventory() {
                     <p className="text-sm text-gray-900">{formatDate(selectedCert.created_at)}</p>
                   </div>
                 </div>
+                {(selectedCert.has_retained_certificate || selectedCert.has_retained_chain) && (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {selectedCert.has_retained_certificate && (
+                      <button type="button" onClick={() => certificateApi.downloadRetainedCertificate(selectedCert.id).catch(() => toast.error('Certificate download failed'))}
+                        className="px-3 py-2 text-sm text-blue-700 border border-blue-200 rounded hover:bg-blue-50">
+                        Download certificate
+                      </button>
+                    )}
+                    {selectedCert.has_retained_chain && (
+                      <button type="button" onClick={() => certificateApi.downloadRetainedChain(selectedCert.id).catch(() => toast.error('Chain download failed'))}
+                        className="px-3 py-2 text-sm text-blue-700 border border-blue-200 rounded hover:bg-blue-50">
+                        Download chain
+                      </button>
+                    )}
+                  </div>
+                )}
                 <div className="mt-6 flex justify-end space-x-3">
                   <button
                     onClick={() => setSelectedCert(null)}

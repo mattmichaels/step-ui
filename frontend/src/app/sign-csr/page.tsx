@@ -1,6 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+// 2026-11-14: Add optional public PEM retention and authenticated historical downloads.
+// 2026-11-14: REV03 - Default public certificate retention from saved CA settings; preserve user overrides.
+
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { certificateApi, SignCSRRequest } from '@/lib/api'
 import { FileText, Upload, AlertCircle } from 'lucide-react'
@@ -10,6 +13,7 @@ import Link from 'next/link'
 interface FormData {
   csr_pem: string
   not_after_days: number
+  retain_certificate: boolean
 }
 
 export default function SignCSR() {
@@ -23,13 +27,30 @@ export default function SignCSR() {
     register,
     handleSubmit,
     setValue,
+    getFieldState,
     formState: { errors },
   } = useForm<FormData>({
     defaultValues: {
       csr_pem: '',
       not_after_days: 365,
+      retain_certificate: false,
     },
   })
+
+  useEffect(() => {
+    const loadRetentionDefault = async () => {
+      try {
+        const settings = await certificateApi.getCASettings()
+        if (!getFieldState('retain_certificate').isDirty) {
+          setValue('retain_certificate', settings.retain_certificates === true)
+        }
+      } catch (error) {
+        console.error('Failed to load certificate retention default:', error)
+      }
+    }
+
+    loadRetentionDefault()
+  }, [getFieldState, setValue])
 
   const onSubmit = async (data: FormData) => {
     setLoading(true)
@@ -37,6 +58,7 @@ export default function SignCSR() {
       const request: SignCSRRequest = {
         csr_pem: data.csr_pem,
         not_after_days: data.not_after_days,
+        retain_certificate: data.retain_certificate,
       }
 
       const response = await certificateApi.signCSR(request)
@@ -154,6 +176,10 @@ MIIB...
             </div>
 
             {/* Submit Button */}
+              <label className="flex items-start gap-2 text-sm text-gray-700 mb-4">
+                  <input type="checkbox" {...register('retain_certificate')} className="mt-1" />
+                  <span>Retain signed public certificate and intermediate-chain PEM for later download. No private keys are stored.</span>
+                </label>
             <div className="flex justify-end space-x-3">
               <Link
                 href="/"
@@ -161,7 +187,8 @@ MIIB...
               >
                 Cancel
               </Link>
-              <button
+
+                <button
                 type="submit"
                 disabled={loading}
                 className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"

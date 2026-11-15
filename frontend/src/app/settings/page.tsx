@@ -1,3 +1,4 @@
+// 2026-11-14: REV01 - Preserve existing production retention preferences during v1.1 download integration; no behavioral changes.
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -12,6 +13,8 @@ export default function Settings() {
   const [testHost, setTestHost] = useState('')
   const [defaultDNSSuffix, setDefaultDNSSuffix] = useState('')
   const [appendDNSSuffix, setAppendDNSSuffix] = useState(false)
+  const [retainCertificates, setRetainCertificates] = useState(false)
+  const [retainPrivateKeys, setRetainPrivateKeys] = useState(false)
   const [savingIssuanceDefaults, setSavingIssuanceDefaults] = useState(false)
 
   useEffect(() => {
@@ -24,6 +27,8 @@ export default function Settings() {
       setSettings(response)
       setDefaultDNSSuffix(response.default_dns_suffix || '')
       setAppendDNSSuffix(response.append_dns_suffix || false)
+      setRetainCertificates(response.retain_certificates || false)
+      setRetainPrivateKeys(response.retain_certificates && response.retain_private_keys || false)
       setTestHost('')
     } catch (error) {
       console.error('Failed to load CA settings:', error)
@@ -39,14 +44,20 @@ export default function Settings() {
       const response = await certificateApi.updateCASettings({
         default_dns_suffix: defaultDNSSuffix,
         append_dns_suffix: appendDNSSuffix,
+        retain_certificates: retainCertificates,
+        retain_private_keys: retainCertificates && retainPrivateKeys,
       })
 
       setDefaultDNSSuffix(response.default_dns_suffix)
       setAppendDNSSuffix(response.append_dns_suffix)
+      setRetainCertificates(response.retain_certificates)
+      setRetainPrivateKeys(response.retain_private_keys)
       setSettings(current => current ? {
         ...current,
         default_dns_suffix: response.default_dns_suffix,
         append_dns_suffix: response.append_dns_suffix,
+        retain_certificates: response.retain_certificates,
+        retain_private_keys: response.retain_private_keys,
       } : current)
 
       toast.success('Certificate issuance defaults saved!')
@@ -224,6 +235,71 @@ export default function Settings() {
                     When disabled, the Common Name field remains unchanged and accepts a complete hostname as usual.
                   </p>
                 </div>
+              </div>
+
+              {/* Certificate retention settings */}
+              <div className="border-t border-gray-200 pt-5 space-y-4">
+                <div className="flex items-start">
+                  <input
+                    id="retain_certificates"
+                    type="checkbox"
+                    checked={retainCertificates}
+                    onChange={(event) => {
+                      const enabled = event.target.checked
+                      setRetainCertificates(enabled)
+                      if (!enabled) {
+                        setRetainPrivateKeys(false)
+                      }
+                    }}
+                    className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <div className="ml-3">
+                    <label
+                      htmlFor="retain_certificates"
+                      className="text-sm font-medium text-gray-700"
+                    >
+                      Retain issued certificates for future download
+                    </label>
+                    <p className="text-sm text-gray-500">
+                      Store newly issued certificates and CA chains so they
+                      can be downloaded again later.
+                    </p>
+                  </div>
+                </div>
+
+                <div className={`ml-7 flex items-start ${!retainCertificates ? 'opacity-50' : ''}`}>
+                  <input
+                    id="retain_private_keys"
+                    type="checkbox"
+                    checked={retainCertificates && retainPrivateKeys}
+                    disabled={!retainCertificates}
+                    onChange={(event) => setRetainPrivateKeys(event.target.checked)}
+                    className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:cursor-not-allowed"
+                  />
+                  <div className="ml-3">
+                    <label
+                      htmlFor="retain_private_keys"
+                      className={`text-sm font-medium ${retainCertificates ? 'text-gray-700' : 'text-gray-400'}`}
+                    >
+                      Retain private keys with certificate bundles
+                    </label>
+                    <p className="text-sm text-gray-500">
+                      Securely retain Step UI-generated private keys for
+                      future downloads. Private keys supplied through
+                      certificate signing requests are never retained.
+                    </p>
+                    {!retainCertificates && (
+                      <p className="mt-1 text-xs text-gray-500">
+                        Enable certificate retention to select this option.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <p className="text-xs text-gray-500">
+                  These preferences apply only to newly issued certificates.
+                  Disabling retention does not delete previously retained files.
+                </p>
               </div>
 
               <div>
